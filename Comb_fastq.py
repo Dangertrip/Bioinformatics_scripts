@@ -14,9 +14,10 @@ def GetFastqList(joined_reads,Part_Fastq_Filename,step,length_bin):
         n = name
         nameset[n]=[[read.order,read.sum] for read in reads_list]
         contentset[n]=[['',''] for i in range(len(nameset[n]))]#read_content,read_quality
+        #contentset[n]=['','']
 
 
-    file_order=0
+    file_order=3
     for name in Part_Fastq_Filename:
         with open(name) as f:
             lines = f.readlines()
@@ -27,62 +28,73 @@ def GetFastqList(joined_reads,Part_Fastq_Filename,step,length_bin):
             quality = lines[i+3].strip()
             fraction_num=0
             for order,sum in nameset[fqname]:
+                print(order,sum)
+                if file_order==order:
+                    contentset[fqname][fraction_num][0]=read
+                    contentset[fqname][fraction_num][1]=quality
                 if file_order>=order and file_order<=order+sum:
                     add_length = ((len(read)-1)%step)+1
-                    contentset[fqname][fraction][0]+=read[-1*add_length:]
-                    contentset[fqname][fraction][1]+=quality[-1*add_length:]
+                    contentset[fqname][fraction_num][0]+=read[-1*add_length:]
+                    contentset[fqname][fraction_num][1]+=quality[-1*add_length:]
                 fraction_num+=1
+        file_order+=1
     return contentset
 
 
 def combine(outputname,Part_Fastq_Filename,step,length_bin):
+    Part_Fastq_Filename=Part_Fastq_Filename[3:5]
+    print(Part_Fastq_Filename)
     cache_length=3
     result={}
-    file_order=0
+    file_order=3
     for name in Part_Fastq_Filename:
-        command = 'samtools view '+name+'.bam'
+        command = 'samtools view '+name+'.bam >'+name+'.sam'
         SamFileMaker = Pshell(command)
-        SamFileMaker.process()
-        partsamlines = SamFileMaker.out.split('\n')[:-1]
-        del SamFileMaker
+        #SamFileMaker.process()
+        with open(name+'.sam') as f:
         #print(partsamlines[-1])
-        for line in partsamlines:
-            #print(line)
-            s = line.strip().split('\t')
-            mismatch = int(s[11][s[11].rfind(':')+1:])
-            if not(s[0] in result) or (len(result[s[0]])==0):
-                result[s[0]]=[utils.reads(s[2],int(s[3]),file_order,mismatch)]
-            else:
-                temp = utils.reads(s[2],int(s[3]),file_order,mismatch)
-                #reads from cliped mapped bam
-                join_or_not=False
-                read_length = len(s[9])
-                tail_length = ((read_length-1)%step)+1
-                refseq = s[12][-2-tail_length:-2]
-                readsseq = s[9][-step:]
-                strand = s[13][-2:]
-                for reads in result[s[0]]:#Try to join existing seeds
-                    if reads.canjoin(temp,step,read_length,length_bin):
-                        mis=0
-                        for ppp in range(step):
-                            if refseq[ppp]!=readsseq[ppp]:
-                                #Here ++/+-/-+/-- should be considered. C/T or A/G match should be identified.
-                                if strand[0]=='+':
-                                    if (refseq[ppp]=='C' and readsseq=='T'): continue
-                                else:
-                                    if (refseq[ppp]=='G' and readsseq=='A'): continue
-                                mis+=1
-                        reads.join(temp,mis)
-                        join_or_not=True
-                        break
+            for line in f:
+                #print(line)
+                s = line.strip().split('\t')
+                mismatch = int(s[11][s[11].rfind(':')+1:])
+                if not(s[0] in result) or (len(result[s[0]])==0):
+                    result[s[0]]=[utils.reads(s[2],int(s[3]),file_order,mismatch)]
+                else:
+                    temp = utils.reads(s[2],int(s[3]),file_order,mismatch)
+                    #reads from cliped mapped bam
+                    join_or_not=False
+                    read_length = len(s[9])
+                    tail_length = ((read_length-1)%step)+1
+                    refseq = s[12][-2-tail_length:-2]
+                    readsseq = s[9][-step:]
+                    strand = s[13][-2:]
+                    for reads in result[s[0]]:#Try to join existing seeds
+                        if reads.canjoin(temp,step,read_length,length_bin):
+                            mis=0
+                            for ppp in range(step):
+                                if refseq[ppp]!=readsseq[ppp]:
+                                    #Here ++/+-/-+/-- should be considered. C/T or A/G match should be identified.
+                                    if strand[0]=='+':
+                                        if (refseq[ppp]=='C' and readsseq=='T'): continue
+                                    else:
+                                        if (refseq[ppp]=='G' and readsseq=='A'): continue
+                                    mis+=1
+                            reads.join(temp,mis)
+                            join_or_not=True
+                            break
 
-                if not join_or_not: #temp reads haven't join any exist reads
-                    result[s[0]].append(temp) #add temp reads to array as new seed
-                    if len(result[s[0]]>=s):
-                        for read in result[s[0]]:
-                            if read
-                    print(len(result[s[0]]))
-        file_order+=1
+                    frac_list=result[s[0]]
+                    if not join_or_not: #temp reads haven't join any exist reads
+                        frac_list.append(temp) #add temp reads to array as new seed
+                        #if file_order>2 and len(frac_list)>=s:
+                        #    for i in range(len(frac_list)-1,-1,-1):
+                        #        read = frac_list[i]
+                        #        if file_order-read.order>2:
+                        #            if read.getSum()==0 and read.getMismatch()>1:
+                        #                frac_list.pop(i)
+
+                        #print(len(result[s[0]]))
+    file_order+=1
     #join done
     #filter results: filter1
     for name in result:
@@ -114,11 +126,12 @@ def combine(outputname,Part_Fastq_Filename,step,length_bin):
     fastq_dic = GetFastqList(result,Part_Fastq_Filename,step,length_bin)
     with open(outputname+'_finalfastq.fastq','w') as f:
         for name in fastq_dic:
-            read,quality = fastq_dic[name]
-            f.write(name+'\n')
-            f.write(read+'\n')
-            f.write('+\n')
-            f.write(quality+'\n')
+            for read,quality in fastq_dic[name]:
+                #read,quality = fastq_dic[name][num]
+                f.write(name+'\n')
+                f.write(read+'\n')
+                f.write('+\n')
+                f.write(quality+'\n')
 
 
 
