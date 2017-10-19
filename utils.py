@@ -73,8 +73,10 @@ class reads():
         return False
 
 
-def overlap(a,b):
-    #if a.getChrom()!=b.getChrom(): return False
+def overlap(a,b,step,length_bin):
+#Detect 2 kinds of overlapping
+# 1. fragments combination overlap: fragment 1 and fragment 2,3,4.. can not appear in two different combinations
+# 2. combinations can not overlap in reference genome.
     ordera = a.getOrder()
     orderb = b.getOrder()
     if (orderb<ordera):
@@ -87,17 +89,18 @@ def overlap(a,b):
     sb = b.getStartPos()
     suma = a.getSum()
     sumb = b.getSum()
-    #if sa+suma*5+30>sb: return True
-    if orderb-ordera-suma<=5: return True
+    if (a.getChrom()==b.getChrom()) and ((sa<sb and sa+suma*step+length_bin>sb) or (sb<sa and sb+sumb*step+length_bin>sa)): 
+        return True
+    if orderb-ordera-suma<=(length_bin/step)-1: return True
     return False
-
+'''
 def cut(step,bin,reads,file_order):
 #    print(step,bin,reads,file_order)
     start = step*file_order
     end = start+bin
     length = len(reads)
-    if end-step>=length:
+    if end-step>=length or end-start<=length_bin-step:
         return False,''
     if end>length: end=length
     return True,reads[start:end]
-
+'''

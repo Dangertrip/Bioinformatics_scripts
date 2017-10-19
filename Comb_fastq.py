@@ -17,22 +17,22 @@ def GetFastqList(joined_reads,Part_Fastq_Filename,step,length_bin):
         #contentset[n]=['','']
 
 
-    file_order=3
+    file_order=0
     for name in Part_Fastq_Filename:
         with open(name) as f:
             lines = f.readlines()
         for i in range(0,len(lines),4):
-            fqname = lines[i].strip().split()[0]
+            fqname = lines[i].strip().split()[0][1:]
             if not fqname in nameset: continue
             read = lines[i+1].strip()
             quality = lines[i+3].strip()
             fraction_num=0
             for order,sum in nameset[fqname]:
-                print(order,sum)
+                #print(order,sum)
                 if file_order==order:
                     contentset[fqname][fraction_num][0]=read
                     contentset[fqname][fraction_num][1]=quality
-                if file_order>=order and file_order<=order+sum:
+                if file_order>order and file_order<=order+sum:
                     add_length = ((len(read)-1)%step)+1
                     contentset[fqname][fraction_num][0]+=read[-1*add_length:]
                     contentset[fqname][fraction_num][1]+=quality[-1*add_length:]
@@ -42,15 +42,15 @@ def GetFastqList(joined_reads,Part_Fastq_Filename,step,length_bin):
 
 
 def combine(outputname,Part_Fastq_Filename,step,length_bin):
-    Part_Fastq_Filename=Part_Fastq_Filename[3:5]
-    print(Part_Fastq_Filename)
+    Part_Fastq_Filename=Part_Fastq_Filename
+    #print(Part_Fastq_Filename)
     cache_length=3
     result={}
-    file_order=3
+    file_order=0
     for name in Part_Fastq_Filename:
         command = 'samtools view '+name+'.bam >'+name+'.sam'
         SamFileMaker = Pshell(command)
-        #SamFileMaker.process()
+        SamFileMaker.process()
         with open(name+'.sam') as f:
         #print(partsamlines[-1])
             for line in f:
@@ -66,13 +66,13 @@ def combine(outputname,Part_Fastq_Filename,step,length_bin):
                     read_length = len(s[9])
                     tail_length = ((read_length-1)%step)+1
                     refseq = s[12][-2-tail_length:-2]
-                    readsseq = s[9][-step:]
+                    readsseq = s[9][-tail_length:]
                     strand = s[13][-2:]
                     for reads in result[s[0]]:#Try to join existing seeds
                         if reads.canjoin(temp,step,read_length,length_bin):
                             mis=0
-                            for ppp in range(step):
-                                if refseq[ppp]!=readsseq[ppp]:
+                            for ppp in range(tail_length):
+                                if (refseq[ppp]!=readsseq[ppp]):
                                     #Here ++/+-/-+/-- should be considered. C/T or A/G match should be identified.
                                     if strand[0]=='+':
                                         if (refseq[ppp]=='C' and readsseq=='T'): continue
@@ -94,7 +94,7 @@ def combine(outputname,Part_Fastq_Filename,step,length_bin):
                         #                frac_list.pop(i)
 
                         #print(len(result[s[0]]))
-    file_order+=1
+        file_order+=1
     #join done
     #filter results: filter1
     for name in result:
@@ -110,7 +110,7 @@ def combine(outputname,Part_Fastq_Filename,step,length_bin):
         del_mark = [0 for i in range(num)]
         for i in range(num):
             for j in range(i+1,num):
-                if overlap(result[name][i],result[name][j]):
+                if overlap(result[name][i],result[name][j],step,length_bin):
                     sss = result[name][i].getSum()-result[name][j].getSum()
                     if sss>0: del_mark[j]=1
                     elif sss<0: del_mark[i]=1
@@ -126,12 +126,14 @@ def combine(outputname,Part_Fastq_Filename,step,length_bin):
     fastq_dic = GetFastqList(result,Part_Fastq_Filename,step,length_bin)
     with open(outputname+'_finalfastq.fastq','w') as f:
         for name in fastq_dic:
+            num=1
             for read,quality in fastq_dic[name]:
                 #read,quality = fastq_dic[name][num]
-                f.write(name+'\n')
+                f.write('@'+name+'_'+str(num)+'\n')
                 f.write(read+'\n')
                 f.write('+\n')
                 f.write(quality+'\n')
+                num+=1
 
 
 
