@@ -2,6 +2,7 @@ import multiprocessing
 from Comb_fastq import combine
 from utils import *
 import sys
+import gzip
 
 def cut(step,length_bin,link,i):
     start = step*i
@@ -82,16 +83,30 @@ def do_process(l):
 
     for filename in inputfileinfo:
         o+=1
+		gzmark=False
+		if filename.endswith('.gz'):
+			f = gzip.open(filename)
+			gzmark=True
+		else:
+			f = open(filename)
 
-        with open(filename) as f:
+        if f:
             while 1:
-                line1 = f.readline()
+				if gzmark:
+					line1 = f.readline().decode()
+				else:
+                	line1 = f.readline()
                 if not line1:
                     break
-                line1 = line1.strip().split()
-                line2 = f.readline().strip()
-                line3 = f.readline()
-                line4 = f.readline().strip()
+				if gzmark:
+					line2 = f.readline().decode().strip()
+					line3 = f.readline().decode()
+					line4 = f.readline().decode().strip()
+				else:
+                	line2 = f.readline().strip()
+                	line3 = f.readline()
+                	line4 = f.readline().strip()
+				line1 = line1.strip().split()
                 line1[0] = line1[0]
  #           print(line1[0][1:])
                 if (line1[0][1:] in set_sam):
@@ -119,6 +134,7 @@ def do_process(l):
         if len(pfn)>len(Part_Fastq_Filename):
             Part_Fastq_Filename=pfn
     print('finish')
+	f.close()
     del UnmappedReads
     #We've got the splited fastq file, filename is stored in Part_Fastq_Filename
    # p = multiprocessing.Pool(processes=7)
