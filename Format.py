@@ -44,20 +44,20 @@ if __name__=="__main__":
     parser.add_argument('-l','--label',nargs='+')
     parser.add_argument('-c','--cov',default=0)
     args = parser.parse_args()
-    #data = formdata(args.inputfile,cov=args.cov)
+    data = formdata(args.inputfile,cov=int(args.cov))
     header = 'chr\tpos'
     for l in args.label:
         header=header+'\t'+l
     print(header)
     import sys
-    sys.exit()
+#    sys.exit()
     ans = [header+'\n']
 #    print(data[:10])
     for d in data:
         s=''
         for i in range(len(d)-1):
-            s=s+d[i]+'\t'
-        s=s+d[-1]+'\n'
+            s=s+str(d[i])+'\t'
+        s=s+str(d[-1])+'\n'
         ans.append(s)
     with open('meth.bed','w') as f:
         f.writelines(ans)
