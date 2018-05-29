@@ -3,7 +3,7 @@ from Comb_fastq import combine
 from utils import *
 import sys
 import gzip
-
+import os
 def cut(step,length_bin,link,i):
     start = step*i
     end = length_bin + start
@@ -38,12 +38,22 @@ def do_process(l):
     if length<=0 or length>2:
         print("Parameter error in "+l)
         sys.exit()
-    outputname = temp[0][:len(temp[0])-6]
+    refpath='/data/dsun/ref/mouseigenome/mm9.fa'
+    #refpath = '/data/dsun/ref/humanigenome/hg19.fa'
+    tempname=temp[0].lower()
+    if tempname.endswith(".gz"):
+        tempname = tempname[:-3]
+    if tempname.endswith(".fq"):
+        tempname = tempname[:-3]
+    if tempname.endswith(".fastq"):
+        tempname = tempname[:-6]
+    outputname = temp[0][:len(tempname)]
     #print(outputname)
+    phred=33
     if length==2 :
-        commend='bsmap -a '+temp[0]+' -b '+temp[1]+'  -d /data/dsun/ref/humanigenome/hg19.fa -o '+outputname+'.bam -n 1 -q 3 -r 0'
+        commend='bsmap -a '+temp[0]+' -b '+temp[1]+' -z '+str(phred)+' -d '+refpath+' -o '+outputname+'.bam -n 1 -r 0'
     else:
-        commend='bsmap -a '+temp[0]+' -d /data/dsun/ref/humanigenome/hg19.fa  -o '+outputname+'.bam -n 1 -q 3 -r 0'
+        commend='bsmap -a '+temp[0]+' -z '+str(phred)+' -d '+refpath+'  -o '+outputname+'.bam -n 1 -r 0'
     First_try = Pshell(commend)
     First_try.process()
 
@@ -83,36 +93,38 @@ def do_process(l):
 
     for filename in inputfileinfo:
         o+=1
-		gzmark=False
-		if filename.endswith('.gz'):
-			f = gzip.open(filename)
-			gzmark=True
-		else:
-			f = open(filename)
+        gzmark=False
+        if filename.endswith('.gz'):
+            f = gzip.open(filename)
+            gzmark=True
+        else:
+            f = open(filename)
 
         if f:
             while 1:
-				if gzmark:
-					line1 = f.readline().decode()
-				else:
-                	line1 = f.readline()
+                if gzmark:
+                    line1 = f.readline().decode()
+                else:
+                    line1 = f.readline()
                 if not line1:
                     break
-				if gzmark:
-					line2 = f.readline().decode().strip()
-					line3 = f.readline().decode()
-					line4 = f.readline().decode().strip()
-				else:
-                	line2 = f.readline().strip()
-                	line3 = f.readline()
-                	line4 = f.readline().strip()
-				line1 = line1.strip().split()
+                if gzmark:
+                    line2 = f.readline().decode().strip()
+                    line3 = f.readline().decode()
+                    line4 = f.readline().decode().strip()
+                else:
+                    line2 = f.readline().strip()
+                    line3 = f.readline()
+                    line4 = f.readline().strip()
+                line1 = line1.strip().split()
                 line1[0] = line1[0]
  #           print(line1[0][1:])
                 if (line1[0][1:] in set_sam):
-                #print(line1[0][1:],set_sam[line1[0][1:]],int(line1[1][0]))
+                    string_mark = o
+                    if line1[1][0]>='1' and line1[1][0]<='2':
+                        string_mark = int(line1[1][0])
                     if set_sam[line1[0][1:]]==0 or set_sam[line1[0][1:]]==3 : continue
-                    if set_sam[line1[0][1:]]==int(line1[1][0]) : continue
+                    if set_sam[line1[0][1:]]==string_mark : continue
 
                 temp = line1[0]
                 if length>1: temp+='_'+line1[1][0]
@@ -134,12 +146,12 @@ def do_process(l):
         if len(pfn)>len(Part_Fastq_Filename):
             Part_Fastq_Filename=pfn
     print('finish')
-	f.close()
+    f.close()
     del UnmappedReads
     #We've got the splited fastq file, filename is stored in Part_Fastq_Filename
    # p = multiprocessing.Pool(processes=7)
     for i in range(len(Part_Fastq_Filename)):
-        commend = 'bsmap -a '+Part_Fastq_Filename[i]+'  -d /data/dsun/ref/humanigenome/hg19.fa  -o '+Part_Fastq_Filename[i]+'.bam -n 1 -q 3 -r 0 -R'
+        commend = 'bsmap -a '+Part_Fastq_Filename[i]+' -z '+str(phred)+' -d '+refpath+'  -o '+Part_Fastq_Filename[i]+'.bam -n 1 -r 0 -R'
         Batch_try = Pshell(commend)
         Batch_try.process()
 
@@ -148,9 +160,30 @@ def do_process(l):
 
     combine(outputname,Part_Fastq_Filename,step,length_bin)
 
-    commend = 'bsmap -a '+outputname+'_finalfastq.fastq -d /data/dsun/ref/humanigenome/hg19.fa  -o '+outputname+'_split.bam -n 1 -q 3 -r 0'
+    commend = 'bsmap -a '+outputname+'_finalfastq.fastq -d '+refpath+' -z '+str(phred)+' -o '+outputname+'_split.bam -n 1 -r 0'
     Bam = Pshell(commend)
     Bam.process()
+    splitfilename = outputname+'_split.bam'
+    header = outputname+'.header'
+    command='samtools view -H '+splitfilename+' > '+header
+    filter = Pshell(command)
+    filter.process()
+    split_length=40
+    command='samtools view '+splitfilename+"| awk '{if (length($10>"+str(split_length)+")) print}' > "+splitfilename+'.sam'
+    filter.change(command)
+    filter.process()
+    command='cat '+header+' '+splitfilename+'.sam | samtools view -bS - > '+splitfilename+'.bam'
+    filter.change(command)
+    filter.process()
+    command='samtools sort -@ 4 '+splitfilename+'.bam'+' -o '+splitfilename+'.sorted.bam'
+    filter.change(command)
+    filter.process()
+    command='mv '+splitfilename+'.sorted.bam '+splitfilename
+    filter.change(command)
+    filter.process()
+    command='rm '+splitfilename+'.bam '+splitfilename+'.sam'
+    filter.change(command)
+    filter.process()
     m=Pshell('samtools merge '+outputname+'_combine.bam '+outputname+'.bam '+outputname+'_split.bam')
     m.process()
     print("Merge done!\nCreated final bam file called "+outputname+'_combine.bam')
