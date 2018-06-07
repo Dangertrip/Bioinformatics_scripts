@@ -56,7 +56,15 @@ def do_process(l):
         commend='bsmap -a '+temp[0]+' -z '+str(phred)+' -d '+refpath+'  -o '+outputname+'.bam -n 1 -r 0'
     First_try = Pshell(commend)
     First_try.process()
-
+    command='samtools sort -@ 4 '+outputname+'.bam'+' -o '+outputname+'.sorted.bam'
+    First_try.change(command)
+    First_try.process()
+    command='mv '+outputname+'.sorted.bam '+outputname+'.bam'
+    First_try.change(command)
+    First_try.process()
+    command='rm '+outputname+'.sorted.bam'
+    First_try.change(command)
+    First_try.process()
 #Test1 done
     inputfileinfo=l.strip().split()
     commend = 'samtools view '+outputname+'.bam > '+outputname+'.sam'
@@ -169,7 +177,7 @@ def do_process(l):
     filter = Pshell(command)
     filter.process()
     split_length=40
-    command='samtools view '+splitfilename+"| awk '{if (length($10>"+str(split_length)+")) print}' > "+splitfilename+'.sam'
+    command='samtools view '+splitfilename+"| awk '{if (length($10)>"+str(split_length)+") print}' > "+splitfilename+'.sam'
     filter.change(command)
     filter.process()
     command='cat '+header+' '+splitfilename+'.sam | samtools view -bS - > '+splitfilename+'.bam'
@@ -192,10 +200,10 @@ if __name__=="__main__":
     with open("config.txt") as f:
         lines = f.readlines()
     import multiprocessing
-    pool = multiprocessing.Pool(processes=1)
+    pool = multiprocessing.Pool(processes=2)
     for l in lines:
-        #pool.apply_async(do_process,(l,))
-        do_process(l) #pass file name to do_process
+        pool.apply_async(do_process,(l,))
+        #do_process(l) #pass file name to do_process
     pool.close()
     pool.join()
 
